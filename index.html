@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 이미지 업스케일링</title>
+  <link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+  <main class="app" id="app">
+    <header class="app-header">
+      <p class="eyebrow">AI Upscaling Studio</p>
+      <h1>이미지 업스케일링</h1>
+      <p class="subtitle">업로드부터 비교, 다운로드까지 단일 화면에서 진행됩니다.</p>
+      <p class="phase-indicator" aria-live="polite">
+        <span>현재 상태</span>
+        <strong id="status-text">대기</strong>
+      </p>
+    </header>
+
+    <section id="phase-upload" class="phase active" aria-labelledby="upload-title">
+      <h2 id="upload-title" class="phase-title">1. 이미지 업로드</h2>
+
+      <label
+        id="drop-zone"
+        class="drop-zone"
+        for="file-input"
+        role="button"
+        tabindex="0"
+        aria-controls="file-input"
+      >
+        <span class="drop-zone-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M12 3V15" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+            <path d="M7 8L12 3L17 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+            <path d="M4 20H20" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+          </svg>
+        </span>
+        <span class="drop-zone-title">이미지를 여기로 드래그하거나 클릭해 업로드하세요</span>
+        <span class="drop-zone-hint" id="upload-guide">지원 형식: JPG, PNG, WEBP / 최대 10MB</span>
+      </label>
+
+      <input
+        id="file-input"
+        class="sr-only-input"
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        aria-describedby="upload-guide"
+      >
+
+      <p id="upload-error" class="status-message error hidden" role="alert"></p>
+    </section>
+
+    <section id="phase-confirm" class="phase" aria-labelledby="confirm-title">
+      <h2 id="confirm-title" class="phase-title">2. 업로드 확인</h2>
+
+      <div class="image-preview-box" aria-live="polite">
+        <img id="preview-image" class="preview-image hidden" alt="업로드한 이미지 미리보기">
+        <p id="preview-placeholder" class="placeholder-text">이미지 미리보기를 준비 중입니다.</p>
+      </div>
+
+      <dl class="file-meta" id="file-meta">
+        <div>
+          <dt>파일명</dt>
+          <dd id="file-name">-</dd>
+        </div>
+        <div>
+          <dt>용량</dt>
+          <dd id="file-size">-</dd>
+        </div>
+        <div>
+          <dt>해상도</dt>
+          <dd id="file-resolution">-</dd>
+        </div>
+      </dl>
+
+      <p id="confirm-error" class="status-message error hidden" role="alert"></p>
+
+      <div class="btn-group">
+        <button type="button" class="btn secondary" data-action="cancel">취소/다시 올리기</button>
+        <button id="btn-proceed" type="button" class="btn primary" data-action="proceed">업스케일링 진행</button>
+      </div>
+    </section>
+
+    <section id="phase-loading" class="phase" aria-labelledby="loading-title" aria-live="polite">
+      <h2 id="loading-title" class="phase-title">3. 처리 중</h2>
+      <div class="spinner" aria-hidden="true"></div>
+      <p class="loading-title">AI가 이미지를 고해상도로 변환하고 있습니다.</p>
+      <div
+        id="loading-progress"
+        class="progress-track"
+        role="progressbar"
+        aria-label="업스케일링 진행률"
+        aria-valuemin="0"
+        aria-valuemax="100"
+        aria-valuenow="0"
+      >
+        <div id="loading-progress-bar" class="progress-bar"></div>
+      </div>
+      <p id="loading-progress-text" class="loading-progress-text">진행률 0%</p>
+      <p id="loading-tip" class="loading-tip"></p>
+    </section>
+
+    <section id="phase-result" class="phase" aria-labelledby="result-title">
+      <h2 id="result-title" class="phase-title">4. 결과 비교</h2>
+
+      <div
+        id="compare-wrapper"
+        class="compare-wrapper hidden"
+        tabindex="0"
+        aria-label="이미지 비교 영역. 좌우 드래그로 원본과 결과를 비교합니다."
+      >
+        <img id="after-image" class="compare-image" alt="업스케일링 결과 이미지">
+
+        <div id="before-layer" class="before-layer">
+          <img id="before-image" class="compare-image" alt="업스케일링 전 원본 이미지">
+        </div>
+
+        <span id="compare-handle" class="compare-handle" aria-hidden="true"></span>
+
+        <span class="compare-badge before">Before</span>
+        <span class="compare-badge after">After</span>
+      </div>
+
+      <div class="compare-controls">
+        <label for="compare-slider">비교 슬라이더</label>
+        <input id="compare-slider" type="range" min="0" max="100" value="50" step="1" aria-label="원본과 결과 비교 슬라이더">
+      </div>
+
+      <p id="result-note" class="status-message success hidden" aria-live="polite"></p>
+
+      <div class="btn-group">
+        <button type="button" class="btn secondary" data-action="restart">새 이미지 작업하기</button>
+        <button type="button" class="btn primary" data-action="download">고화질 다운로드</button>
+      </div>
+    </section>
+
+    <footer class="app-footer">
+      업로드된 이미지는 브라우저 메모리에서만 처리되며, 저장하지 않는 구성을 기본으로 합니다.
+    </footer>
+  </main>
+
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>
