@@ -92,6 +92,20 @@
           </label>
         </div>
 
+        <div id="standard-settings" class="standard-settings">
+          <label for="standard-repeat-count">일반 모드 연속 업스케일링 횟수</label>
+          <input
+            id="standard-repeat-count"
+            type="number"
+            min="1"
+            max="4"
+            step="1"
+            value="1"
+            inputmode="numeric"
+          >
+          <p id="standard-repeat-summary" class="standard-summary">현재 설정: 1회 처리 (총 약 2x)</p>
+        </div>
+
         <div id="premium-settings" class="premium-settings hidden">
           <label for="premium-api-url">Premium API URL</label>
           <input id="premium-api-url" type="url" placeholder="https://your-api.example.com/upscale">

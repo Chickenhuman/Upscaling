@@ -28,70 +28,101 @@ function canvasToBlob(canvas, outputType, outputQuality) {
   });
 }
 
+function drawWithSmoothing(sourceCanvas, targetCanvas) {
+  const targetContext = targetCanvas.getContext("2d");
+  if (!targetContext) {
+    throw new Error("캔버스 컨텍스트를 생성할 수 없습니다.");
+  }
+
+  targetContext.imageSmoothingEnabled = true;
+  targetContext.imageSmoothingQuality = "high";
+  targetContext.drawImage(sourceCanvas, 0, 0, targetCanvas.width, targetCanvas.height);
+}
+
+function validateNextResolution(width, height, maxCanvasDimension, maxOutputPixels) {
+  if (width > maxCanvasDimension || height > maxCanvasDimension) {
+    throw new Error(
+      `결과 해상도가 너무 큽니다. 최대 ${maxCanvasDimension}px 이내로 횟수를 줄여 주세요.`,
+    );
+  }
+
+  if (width * height > maxOutputPixels) {
+    throw new Error("결과 픽셀 수가 너무 큽니다. 일반 모드 연속 횟수를 낮춰 주세요.");
+  }
+}
+
 export async function upscaleImageLocal(file, options = {}) {
   const {
     upscaleFactor = 2,
+    repeatCount = 1,
     outputType = "image/png",
     outputQuality = 0.96,
+    maxCanvasDimension = 8192,
+    maxOutputPixels = 36 * 1024 * 1024,
   } = options;
 
   const picaFactory = getPicaFactoryOrNull();
+  const pica = picaFactory ? picaFactory() : null;
+
   const sourceUrl = URL.createObjectURL(file);
   let resultUrl = "";
 
   try {
     const image = await loadImageFromUrl(sourceUrl);
-    const width = Math.max(1, Math.round(image.naturalWidth * upscaleFactor));
-    const height = Math.max(1, Math.round(image.naturalHeight * upscaleFactor));
 
-    const sourceCanvas = document.createElement("canvas");
-    sourceCanvas.width = image.naturalWidth;
-    sourceCanvas.height = image.naturalHeight;
+    let currentCanvas = document.createElement("canvas");
+    currentCanvas.width = image.naturalWidth;
+    currentCanvas.height = image.naturalHeight;
 
-    const sourceContext = sourceCanvas.getContext("2d");
-    if (!sourceContext) {
+    const initialContext = currentCanvas.getContext("2d");
+    if (!initialContext) {
       throw new Error("캔버스 컨텍스트를 생성할 수 없습니다.");
     }
+    initialContext.drawImage(image, 0, 0);
 
-    sourceContext.drawImage(image, 0, 0);
+    for (let pass = 0; pass < repeatCount; pass += 1) {
+      const nextWidth = Math.max(1, Math.round(currentCanvas.width * upscaleFactor));
+      const nextHeight = Math.max(1, Math.round(currentCanvas.height * upscaleFactor));
 
-    const targetCanvas = document.createElement("canvas");
-    targetCanvas.width = width;
-    targetCanvas.height = height;
+      validateNextResolution(nextWidth, nextHeight, maxCanvasDimension, maxOutputPixels);
 
-    let blob;
-    if (picaFactory) {
-      const pica = picaFactory();
-      await pica.resize(sourceCanvas, targetCanvas, {
-        quality: 3,
-        alpha: true,
-        unsharpAmount: 120,
-        unsharpThreshold: 2,
-      });
-      blob = await pica.toBlob(targetCanvas, outputType, outputQuality);
-    } else {
-      const targetContext = targetCanvas.getContext("2d");
-      if (!targetContext) {
-        throw new Error("캔버스 컨텍스트를 생성할 수 없습니다.");
+      const nextCanvas = document.createElement("canvas");
+      nextCanvas.width = nextWidth;
+      nextCanvas.height = nextHeight;
+
+      if (pica) {
+        await pica.resize(currentCanvas, nextCanvas, {
+          quality: 3,
+          alpha: true,
+          unsharpAmount: 120,
+          unsharpThreshold: 2,
+        });
+      } else {
+        drawWithSmoothing(currentCanvas, nextCanvas);
       }
 
-      targetContext.imageSmoothingEnabled = true;
-      targetContext.imageSmoothingQuality = "high";
-      targetContext.drawImage(image, 0, 0, width, height);
-      blob = await canvasToBlob(targetCanvas, outputType, outputQuality);
+      currentCanvas.width = 0;
+      currentCanvas.height = 0;
+      currentCanvas = nextCanvas;
     }
+
+    const blob = pica
+      ? await pica.toBlob(currentCanvas, outputType, outputQuality)
+      : await canvasToBlob(currentCanvas, outputType, outputQuality);
 
     resultUrl = URL.createObjectURL(blob);
 
-    sourceCanvas.width = 0;
-    sourceCanvas.height = 0;
-    targetCanvas.width = 0;
-    targetCanvas.height = 0;
+    currentCanvas.width = 0;
+    currentCanvas.height = 0;
 
     return {
       imageUrl: resultUrl,
       cleanup: () => URL.revokeObjectURL(resultUrl),
       source: "local-js",
+      meta: {
+        repeatCount,
+        upscaleFactor,
+      },
     };
   } finally {
     URL.revokeObjectURL(sourceUrl);

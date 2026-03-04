@@ -21,7 +21,9 @@ export class UIController {
     this.fileResolution = elements.fileResolution;
     this.confirmError = elements.confirmError;
     this.proceedButton = elements.proceedButton;
+    this.standardSettings = elements.standardSettings;
     this.premiumSettings = elements.premiumSettings;
+    this.standardRepeatSummary = elements.standardRepeatSummary;
     this.modeDescription = elements.modeDescription;
 
     this.loadingProgress = elements.loadingProgress;
@@ -85,10 +87,15 @@ export class UIController {
 
   updateModeUI(mode) {
     const isPremium = mode === "premium";
+    this.standardSettings.classList.toggle("hidden", isPremium);
     this.premiumSettings.classList.toggle("hidden", !isPremium);
     this.modeDescription.textContent = isPremium
       ? "프리미엄 모드: API URL과 API Key를 사용해 고급 업스케일링 엔진 호출"
-      : "일반 모드: API 키 없이 브라우저 JS 라이브러리로 로컬 업스케일링";
+      : "일반 모드: API 키 없이 브라우저 JS 라이브러리로 로컬 업스케일링 (반복 횟수 설정 가능)";
+  }
+
+  setStandardSummary(summaryText) {
+    this.standardRepeatSummary.textContent = summaryText;
   }
 
   renderConfirmPreview({ imageUrl, name, size, resolution }) {
@@ -151,7 +158,10 @@ export class UIController {
 
   updateCompare(value) {
     const safeValue = Math.min(100, Math.max(0, Number(value) || 50));
-    this.beforeLayer.style.width = `${safeValue}%`;
+    const rightInset = 100 - safeValue;
+    const clipValue = `inset(0 ${rightInset}% 0 0)`;
+    this.beforeLayer.style.clipPath = clipValue;
+    this.beforeLayer.style.webkitClipPath = clipValue;
     this.compareHandle.style.left = `${safeValue}%`;
     this.compareSlider.value = String(safeValue);
   }

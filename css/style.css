@@ -272,17 +272,20 @@ body {
   font-size: 0.79rem;
 }
 
+.standard-settings,
 .premium-settings {
   margin-top: 10px;
   display: grid;
   gap: 6px;
 }
 
+.standard-settings label,
 .premium-settings label {
   font-size: 0.82rem;
   color: #36578f;
 }
 
+.standard-settings input,
 .premium-settings input {
   width: 100%;
   border: 1px solid #c8d9f8;
@@ -291,10 +294,17 @@ body {
   font: inherit;
 }
 
+.standard-settings input:focus-visible,
 .premium-settings input:focus-visible {
   outline: none;
   border-color: var(--color-primary);
   box-shadow: 0 0 0 3px rgba(31, 111, 235, 0.18);
+}
+
+.standard-summary {
+  margin: 0;
+  font-size: 0.79rem;
+  color: #4f668e;
 }
 
 .mode-description {
@@ -458,14 +468,16 @@ body {
 
 .before-layer {
   position: absolute;
-  inset: 0 auto 0 0;
-  width: 50%;
+  inset: 0;
+  width: 100%;
   overflow: hidden;
-  border-right: 2px solid rgba(255, 255, 255, 0.9);
+  clip-path: inset(0 50% 0 0);
 }
 
 .before-layer .compare-image {
+  inset: 0;
   width: 100%;
+  height: 100%;
 }
 
 .compare-handle {

@@ -1,5 +1,14 @@
 const BYTES_PER_MB = 1024 * 1024;
 
+export function clampInteger(value, min, max, fallback = min) {
+  const parsed = Number.parseInt(String(value), 10);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+
+  return Math.min(max, Math.max(min, parsed));
+}
+
 export function formatFileSize(bytes) {
   if (!Number.isFinite(bytes) || bytes <= 0) {
     return "0 B";

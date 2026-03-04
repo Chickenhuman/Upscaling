@@ -2,6 +2,7 @@ import { upscaleImage as upscaleImageByApi } from "./api.js";
 import { upscaleImageLocal } from "./local-upscale.js";
 import {
   buildDownloadName,
+  clampInteger,
   formatFileSize,
   getImageDimensionsFromUrl,
   validateImageFile,
@@ -24,15 +25,20 @@ const CONFIG = Object.freeze({
 
   DEFAULT_MODE: UPSCALE_MODE.STANDARD,
   STANDARD_UPSCALE_FACTOR: 2,
+  STANDARD_REPEAT_MIN: 1,
+  STANDARD_REPEAT_MAX: 4,
+  STANDARD_REPEAT_DEFAULT: 1,
+  STANDARD_MAX_OUTPUT_DIMENSION: 8192,
+  STANDARD_MAX_OUTPUT_PIXELS: 36 * 1024 * 1024,
   PREMIUM_UPSCALE_FACTOR: 4,
 
   PREMIUM_API_URL_DEFAULT: "",
   PREMIUM_API_KEY_DEFAULT: "",
 
   STANDARD_LOADING_TIPS: [
-    "일반 모드: 브라우저 내 JS 라이브러리로 이미지를 업스케일링합니다.",
-    "팁: 일반 모드는 API Key 없이 빠르게 결과를 확인하기 좋습니다.",
-    "팁: 더 높은 품질이 필요하면 프리미엄 모드로 전환해 보세요.",
+    "일반 모드: 브라우저 로컬 업스케일링을 수행하고 있습니다.",
+    "팁: 연속 횟수를 늘리면 결과 해상도는 높아지지만 처리 시간도 증가합니다.",
+    "팁: 반복 횟수가 높으면 메모리 사용량도 커집니다.",
   ],
   PREMIUM_LOADING_TIPS: [
     "프리미엄 모드: 외부 업스케일링 API를 호출하고 있습니다.",
@@ -52,6 +58,9 @@ const elements = {
   proceedButton: document.getElementById("btn-proceed"),
 
   modeRadios: Array.from(document.querySelectorAll("input[name='upscale-mode']")),
+  standardSettings: document.getElementById("standard-settings"),
+  standardRepeatInput: document.getElementById("standard-repeat-count"),
+  standardRepeatSummary: document.getElementById("standard-repeat-summary"),
   premiumSettings: document.getElementById("premium-settings"),
   premiumApiUrlInput: document.getElementById("premium-api-url"),
   premiumApiKeyInput: document.getElementById("premium-api-key"),
@@ -92,8 +101,11 @@ const ui = new UIController(elements);
 
 const state = {
   selectedMode: CONFIG.DEFAULT_MODE,
+  standardRepeatCount: CONFIG.STANDARD_REPEAT_DEFAULT,
   selectedFile: null,
   sourceImageUrl: "",
+  sourceWidth: 0,
+  sourceHeight: 0,
   resultImageUrl: "",
   resultCleanup: null,
   isProcessing: false,
@@ -111,8 +123,13 @@ function initialize() {
   elements.premiumApiUrlInput.value = CONFIG.PREMIUM_API_URL_DEFAULT;
   elements.premiumApiKeyInput.value = CONFIG.PREMIUM_API_KEY_DEFAULT;
 
+  elements.standardRepeatInput.min = String(CONFIG.STANDARD_REPEAT_MIN);
+  elements.standardRepeatInput.max = String(CONFIG.STANDARD_REPEAT_MAX);
+  elements.standardRepeatInput.value = String(CONFIG.STANDARD_REPEAT_DEFAULT);
+
   ui.resetForUpload();
   syncModeFromSelection();
+  syncStandardRepeatInput();
 
   elements.fileInput.addEventListener("change", onFileInputChange);
 
@@ -125,6 +142,9 @@ function initialize() {
   elements.modeRadios.forEach((radio) => {
     radio.addEventListener("change", onModeChange);
   });
+
+  elements.standardRepeatInput.addEventListener("input", onStandardRepeatInputChange);
+  elements.standardRepeatInput.addEventListener("change", onStandardRepeatInputChange);
 
   elements.app.addEventListener("click", onAppClick);
   elements.compareSlider.addEventListener("input", onCompareInput);
@@ -181,12 +201,52 @@ function onModeChange() {
   ui.hideConfirmError();
 }
 
+function onStandardRepeatInputChange() {
+  syncStandardRepeatInput();
+  ui.hideConfirmError();
+}
+
 function syncModeFromSelection() {
   const selected = elements.modeRadios.find((radio) => radio.checked)?.value;
   state.selectedMode =
     selected === UPSCALE_MODE.PREMIUM ? UPSCALE_MODE.PREMIUM : UPSCALE_MODE.STANDARD;
 
   ui.updateModeUI(state.selectedMode);
+}
+
+function syncStandardRepeatInput() {
+  state.standardRepeatCount = clampInteger(
+    elements.standardRepeatInput.value,
+    CONFIG.STANDARD_REPEAT_MIN,
+    CONFIG.STANDARD_REPEAT_MAX,
+    CONFIG.STANDARD_REPEAT_DEFAULT,
+  );
+
+  elements.standardRepeatInput.value = String(state.standardRepeatCount);
+  ui.setStandardSummary(buildStandardRepeatSummary());
+}
+
+function buildStandardRepeatSummary() {
+  const totalScale = Math.pow(CONFIG.STANDARD_UPSCALE_FACTOR, state.standardRepeatCount);
+  const scaleLabel = formatScaleLabel(totalScale);
+
+  let summary = `현재 설정: ${state.standardRepeatCount}회 처리 (총 약 ${scaleLabel}x)`;
+
+  if (state.sourceWidth > 0 && state.sourceHeight > 0) {
+    const estimatedWidth = Math.round(state.sourceWidth * totalScale);
+    const estimatedHeight = Math.round(state.sourceHeight * totalScale);
+    summary += ` · 예상 결과 ${estimatedWidth} x ${estimatedHeight}`;
+  }
+
+  return summary;
+}
+
+function formatScaleLabel(scaleValue) {
+  if (Number.isInteger(scaleValue)) {
+    return String(scaleValue);
+  }
+
+  return scaleValue.toFixed(2).replace(/\.00$/, "");
 }
 
 async function handleSelectedFile(file) {
@@ -211,6 +271,8 @@ async function handleSelectedFile(file) {
 
   try {
     const { width, height } = await getImageDimensionsFromUrl(state.sourceImageUrl);
+    state.sourceWidth = width;
+    state.sourceHeight = height;
 
     ui.renderConfirmPreview({
       imageUrl: state.sourceImageUrl,
@@ -219,11 +281,15 @@ async function handleSelectedFile(file) {
       resolution: `${width} x ${height}`,
     });
 
+    syncStandardRepeatInput();
     ui.showPhase("confirm");
   } catch (error) {
     console.error(error);
     clearSourceImage();
     state.selectedFile = null;
+    state.sourceWidth = 0;
+    state.sourceHeight = 0;
+    syncStandardRepeatInput();
     ui.showUploadError("이미지를 읽는 중 문제가 발생했습니다. 다른 파일로 다시 시도해 주세요.");
     ui.showPhase("upload");
   }
@@ -293,6 +359,9 @@ async function startUpscaling() {
       })
       : await upscaleImageLocal(state.selectedFile, {
         upscaleFactor: CONFIG.STANDARD_UPSCALE_FACTOR,
+        repeatCount: state.standardRepeatCount,
+        maxCanvasDimension: CONFIG.STANDARD_MAX_OUTPUT_DIMENSION,
+        maxOutputPixels: CONFIG.STANDARD_MAX_OUTPUT_PIXELS,
       });
 
     stopLoadingProgress(100);
@@ -324,7 +393,8 @@ function buildResultMessage(mode) {
     return "프리미엄 업스케일링이 완료되었습니다. 슬라이더로 결과를 비교해 보세요.";
   }
 
-  return "일반 업스케일링이 완료되었습니다. 슬라이더로 결과를 비교해 보세요.";
+  const totalScale = Math.pow(CONFIG.STANDARD_UPSCALE_FACTOR, state.standardRepeatCount);
+  return `일반 업스케일링 ${state.standardRepeatCount}회(약 ${formatScaleLabel(totalScale)}x)가 완료되었습니다.`;
 }
 
 function buildModeErrorMessage(error, mode) {
@@ -345,9 +415,13 @@ function buildModeErrorMessage(error, mode) {
 }
 
 function getLoadingTipsByMode(mode) {
-  return mode === UPSCALE_MODE.PREMIUM
-    ? CONFIG.PREMIUM_LOADING_TIPS
-    : CONFIG.STANDARD_LOADING_TIPS;
+  if (mode === UPSCALE_MODE.PREMIUM) {
+    return CONFIG.PREMIUM_LOADING_TIPS;
+  }
+
+  const tips = [...CONFIG.STANDARD_LOADING_TIPS];
+  tips[0] = `일반 모드: ${state.standardRepeatCount}회 연속 업스케일링을 처리하고 있습니다.`;
+  return tips;
 }
 
 function downloadResult() {
@@ -424,6 +498,8 @@ function resetToUpload() {
   elements.fileInput.value = "";
 
   state.selectedFile = null;
+  state.sourceWidth = 0;
+  state.sourceHeight = 0;
   state.isProcessing = false;
   state.isCompareDragging = false;
 
@@ -434,6 +510,7 @@ function resetToUpload() {
   ui.stopLoadingTips();
   ui.resetForUpload();
   syncModeFromSelection();
+  syncStandardRepeatInput();
 }
 
 function updateCompareByClientX(clientX) {

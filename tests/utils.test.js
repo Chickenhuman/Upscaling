@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   buildDownloadName,
+  clampInteger,
   formatFileSize,
   validateImageFile,
   validatePremiumConfig,
@@ -24,6 +25,21 @@ describe("formatFileSize", () => {
   it("formats KB and MB with expected precision", () => {
     assert.equal(formatFileSize(1536), "1.5 KB");
     assert.equal(formatFileSize(5 * 1024 * 1024), "5.00 MB");
+  });
+});
+
+describe("clampInteger", () => {
+  it("returns fallback when value is not a valid number", () => {
+    assert.equal(clampInteger("invalid", 1, 5, 2), 2);
+  });
+
+  it("clamps below and above bounds", () => {
+    assert.equal(clampInteger(0, 1, 5), 1);
+    assert.equal(clampInteger(9, 1, 5), 5);
+  });
+
+  it("accepts values in bounds", () => {
+    assert.equal(clampInteger(3, 1, 5), 3);
   });
 });
 
