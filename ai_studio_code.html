@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 이미지 업스케일링</title>
+    <style>
+        /* [1] CSS 변수 설정: 하드코딩 지양, 여기서 모든 디자인 테마 관리 */
+        :root {
+            --primary-color: #4A90E2;       /* 메인 포인트 색상 (블루) */
+            --primary-hover: #357ABD;       /* 버튼 호버 색상 */
+            --bg-color: #F4F7F6;            /* 전체 배경색 */
+            --card-bg: #FFFFFF;             /* 카드(컨테이너) 배경색 */
+            --text-main: #333333;           /* 기본 텍스트 색상 */
+            --text-sub: #777777;            /* 보조 텍스트 색상 */
+            --border-color: #DDDDDD;        /* 테두리 색상 */
+            --radius: 12px;                 /* 둥근 모서리 값 */
+            --transition: 0.3s ease;        /* 애니메이션 속도 */
+        }
+
+        /* [2] 기본 초기화 및 레이아웃 */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            background-color: var(--card-bg);
+            width: 100%;
+            max-width: 500px;
+            padding: 40px 30px;
+            border-radius: var(--radius);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            color: var(--text-main);
+        }
+
+        /* [3] 상태 화면(Phase) 토글 처리용 클래스 */
+        .phase {
+            display: none; /* 기본적으로 숨김 */
+            animation: fadeIn var(--transition);
+        }
+        .phase.active {
+            display: block; /* active 클래스가 붙으면 보임 */
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* [4] 드래그 앤 드롭 영역 (Phase 1) */
+        .drop-zone {
+            border: 2px dashed var(--border-color);
+            border-radius: var(--radius);
+            padding: 50px 20px;
+            background-color: #fafafa;
+            cursor: pointer;
+            transition: background-color var(--transition), border-color var(--transition);
+            margin-bottom: 20px;
+        }
+        .drop-zone:hover {
+            background-color: #f0f7ff;
+            border-color: var(--primary-color);
+        }
+        .drop-zone p {
+            color: var(--text-sub);
+            margin-top: 10px;
+        }
+
+        /* 숨겨진 파일 입력창 */
+        #file-input { display: none; }
+
+        /* [5] 이미지 미리보기 영역 (Phase 2 & 4) */
+        .image-preview-box {
+            width: 100%;
+            height: 250px;
+            background-color: #eee;
+            border-radius: var(--radius);
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: var(--text-sub);
+            overflow: hidden;
+        }
+
+        /* [6] 공통 버튼 스타일 */
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: var(--radius);
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color var(--transition);
+        }
+        .btn-primary {
+            background-color: var(--primary-color);
+            color: white;
+            flex: 1;
+        }
+        .btn-primary:hover {
+            background-color: var(--primary-hover);
+        }
+        .btn-secondary {
+            background-color: #E0E0E0;
+            color: var(--text-main);
+            flex: 1;
+        }
+        .btn-secondary:hover {
+            background-color: #D5D5D5;
+        }
+
+        /* [7] 로딩 스피너 (Phase 3) */
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid var(--border-color);
+            border-top-color: var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 40px auto;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+
+    <main class="container">
+        <h1>✨ AI 이미지 업스케일링</h1>
+
+        <!-- [Phase 1] 파일 업로드 화면 -->
+        <section id="phase-upload" class="phase active">
+            <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="var(--text-sub)"><path d="M12 2L12 16M12 2L8 6M12 2L16 6M4 20L20 20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <p>클릭하거나 이미지를 끌어다 놓으세요</p>
+                <p style="font-size: 0.8rem; margin-top: 5px;">지원: JPG, PNG (최대 5MB)</p>
+            </div>
+            <input type="file" id="file-input" accept="image/*">
+        </section>
+
+        <!-- [Phase 2] 업로드 확인 화면 -->
+        <section id="phase-confirm" class="phase">
+            <div class="image-preview-box" id="preview-area">
+                [이미지 미리보기 영역]
+            </div>
+            <p>이 이미지를 업스케일링 하시겠습니까?</p>
+            <div class="btn-group">
+                <button class="btn-secondary" id="btn-cancel">취소</button>
+                <button class="btn-primary" id="btn-proceed">네, 진행합니다</button>
+            </div>
+        </section>
+
+        <!-- [Phase 3] 처리 중 (로딩) 화면 -->
+        <section id="phase-loading" class="phase">
+            <div class="spinner"></div>
+            <p>AI가 이미지를 고해상도로 변환 중입니다...</p>
+            <p style="font-size: 0.8rem; color: var(--text-sub); margin-top: 5px;">잠시만 기다려 주세요.</p>
+        </section>
+
+        <!-- [Phase 4] 완료 및 결과 화면 -->
+        <section id="phase-result" class="phase">
+            <div class="image-preview-box" id="result-area">
+                [결과 이미지 비교 영역 (Before/After)]
+            </div>
+            <p style="color: #2e7d32; font-weight: bold; margin-bottom: 10px;">업스케일링이 완료되었습니다!</p>
+            <div class="btn-group">
+                <button class="btn-secondary" id="btn-restart">새 이미지 작업</button>
+                <button class="btn-primary" id="btn-download">고화질 다운로드</button>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        // DOM 요소 캐싱 (자주 찾는 요소를 변수에 저장하여 성능 최적화)
+        const phases = {
+            upload: document.getElementById('phase-upload'),
+            confirm: document.getElementById('phase-confirm'),
+            loading: document.getElementById('phase-loading'),
+            result: document.getElementById('phase-result')
+        };
+
+        const fileInput = document.getElementById('file-input');
+        const btnCancel = document.getElementById('btn-cancel');
+        const btnProceed = document.getElementById('btn-proceed');
+        const btnRestart = document.getElementById('btn-restart');
+
+        // 특정 화면(Phase)만 보여주고 나머지는 숨기는 함수
+        function showPhase(phaseName) {
+            // 모든 화면 숨기기
+            Object.values(phases).forEach(section => section.classList.remove('active'));
+            // 선택한 화면만 보이기
+            phases[phaseName].classList.add('active');
+        }
+
+        // ==========================================
+        // 🔹 UI 흐름 테스트용 이벤트 리스너 (Step 1 용)
+        // ==========================================
+
+        // 1. 파일 선택 창에서 파일이 선택되었을 때 (Upload -> Confirm)
+        fileInput.addEventListener('change', (e) => {
+            if(e.target.files.length > 0) {
+                // 실제 이미지 미리보기 로직은 Step 2에서 추가됩니다.
+                showPhase('confirm');
+            }
+        });
+
+        // 2. 확인 화면에서 '취소' 버튼 클릭 시 (Confirm -> Upload)
+        btnCancel.addEventListener('click', () => {
+            fileInput.value = ''; // 선택된 파일 초기화
+            showPhase('upload');
+        });
+
+        // 3. 확인 화면에서 '진행' 버튼 클릭 시 (Confirm -> Loading -> Result)
+        btnProceed.addEventListener('click', () => {
+            showPhase('loading');
+
+            // API 통신을 흉내내는 가짜 지연시간 (3초 후 결과 화면으로 이동)
+            setTimeout(() => {
+                showPhase('result');
+            }, 3000); // 3000ms = 3초
+        });
+
+        // 4. 결과 화면에서 '새 이미지 작업' 버튼 클릭 시 (Result -> Upload)
+        btnRestart.addEventListener('click', () => {
+            fileInput.value = '';
+            showPhase('upload');
+        });
+
+    </script>
+</body>
+</html>
