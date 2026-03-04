@@ -8,12 +8,24 @@ function loadImageFromUrl(url) {
   });
 }
 
-function ensurePicaAvailable() {
-  if (typeof window.pica !== "function") {
-    throw new Error("일반 모드 업스케일링 라이브러리(pica)를 찾을 수 없습니다.");
+function getPicaFactoryOrNull() {
+  if (typeof window.pica === "function") {
+    return window.pica;
   }
 
-  return window.pica;
+  return null;
+}
+
+function canvasToBlob(canvas, outputType, outputQuality) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error("업스케일 결과 Blob 생성에 실패했습니다."));
+        return;
+      }
+      resolve(blob);
+    }, outputType, outputQuality);
+  });
 }
 
 export async function upscaleImageLocal(file, options = {}) {
@@ -23,7 +35,7 @@ export async function upscaleImageLocal(file, options = {}) {
     outputQuality = 0.96,
   } = options;
 
-  const picaFactory = ensurePicaAvailable();
+  const picaFactory = getPicaFactoryOrNull();
   const sourceUrl = URL.createObjectURL(file);
   let resultUrl = "";
 
@@ -47,15 +59,28 @@ export async function upscaleImageLocal(file, options = {}) {
     targetCanvas.width = width;
     targetCanvas.height = height;
 
-    const pica = picaFactory();
-    await pica.resize(sourceCanvas, targetCanvas, {
-      quality: 3,
-      alpha: true,
-      unsharpAmount: 120,
-      unsharpThreshold: 2,
-    });
+    let blob;
+    if (picaFactory) {
+      const pica = picaFactory();
+      await pica.resize(sourceCanvas, targetCanvas, {
+        quality: 3,
+        alpha: true,
+        unsharpAmount: 120,
+        unsharpThreshold: 2,
+      });
+      blob = await pica.toBlob(targetCanvas, outputType, outputQuality);
+    } else {
+      const targetContext = targetCanvas.getContext("2d");
+      if (!targetContext) {
+        throw new Error("캔버스 컨텍스트를 생성할 수 없습니다.");
+      }
 
-    const blob = await pica.toBlob(targetCanvas, outputType, outputQuality);
+      targetContext.imageSmoothingEnabled = true;
+      targetContext.imageSmoothingQuality = "high";
+      targetContext.drawImage(image, 0, 0, width, height);
+      blob = await canvasToBlob(targetCanvas, outputType, outputQuality);
+    }
+
     resultUrl = URL.createObjectURL(blob);
 
     sourceCanvas.width = 0;
