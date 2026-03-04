@@ -1,7 +1,12 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { buildDownloadName, formatFileSize, validateImageFile } from "../js/utils.js";
+import {
+  buildDownloadName,
+  formatFileSize,
+  validateImageFile,
+  validatePremiumConfig,
+} from "../js/utils.js";
 
 const baseConfig = {
   ALLOWED_MIME_TYPES: ["image/jpeg", "image/png", "image/webp"],
@@ -59,5 +64,46 @@ describe("validateImageFile", () => {
 
     assert.equal(result.valid, false);
     assert.match(result.message, /최대 10MB/);
+  });
+});
+
+describe("validatePremiumConfig", () => {
+  it("accepts valid api url and key", () => {
+    const result = validatePremiumConfig({
+      apiUrl: "https://api.example.com/upscale",
+      apiKey: "sk-test",
+    });
+
+    assert.equal(result.valid, true);
+  });
+
+  it("rejects missing api url", () => {
+    const result = validatePremiumConfig({
+      apiUrl: "",
+      apiKey: "sk-test",
+    });
+
+    assert.equal(result.valid, false);
+    assert.match(result.message, /API URL/);
+  });
+
+  it("rejects invalid api url format", () => {
+    const result = validatePremiumConfig({
+      apiUrl: "not-a-url",
+      apiKey: "sk-test",
+    });
+
+    assert.equal(result.valid, false);
+    assert.match(result.message, /형식/);
+  });
+
+  it("rejects missing api key", () => {
+    const result = validatePremiumConfig({
+      apiUrl: "https://api.example.com/upscale",
+      apiKey: "",
+    });
+
+    assert.equal(result.valid, false);
+    assert.match(result.message, /API Key/);
   });
 });

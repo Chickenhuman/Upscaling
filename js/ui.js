@@ -21,6 +21,8 @@ export class UIController {
     this.fileResolution = elements.fileResolution;
     this.confirmError = elements.confirmError;
     this.proceedButton = elements.proceedButton;
+    this.premiumSettings = elements.premiumSettings;
+    this.modeDescription = elements.modeDescription;
 
     this.loadingProgress = elements.loadingProgress;
     this.loadingProgressBar = elements.loadingProgressBar;
@@ -79,6 +81,14 @@ export class UIController {
 
   setProcessingState(isProcessing) {
     this.proceedButton.disabled = isProcessing;
+  }
+
+  updateModeUI(mode) {
+    const isPremium = mode === "premium";
+    this.premiumSettings.classList.toggle("hidden", !isPremium);
+    this.modeDescription.textContent = isPremium
+      ? "프리미엄 모드: API URL과 API Key를 사용해 고급 업스케일링 엔진 호출"
+      : "일반 모드: API 키 없이 브라우저 JS 라이브러리로 로컬 업스케일링";
   }
 
   renderConfirmPreview({ imageUrl, name, size, resolution }) {

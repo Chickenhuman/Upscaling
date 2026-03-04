@@ -76,6 +76,35 @@
 
       <p id="confirm-error" class="status-message error hidden" role="alert"></p>
 
+      <div class="mode-panel" aria-labelledby="mode-title">
+        <h3 id="mode-title" class="mode-title">업스케일링 모드</h3>
+
+        <div class="mode-options" role="radiogroup" aria-label="업스케일링 모드 선택">
+          <label class="mode-option">
+            <input type="radio" name="upscale-mode" value="standard" checked>
+            <span>일반 모드</span>
+            <small>브라우저 JS 라이브러리로 로컬 처리</small>
+          </label>
+          <label class="mode-option">
+            <input type="radio" name="upscale-mode" value="premium">
+            <span>프리미엄 모드</span>
+            <small>외부 API + API Key 필요</small>
+          </label>
+        </div>
+
+        <div id="premium-settings" class="premium-settings hidden">
+          <label for="premium-api-url">Premium API URL</label>
+          <input id="premium-api-url" type="url" placeholder="https://your-api.example.com/upscale">
+
+          <label for="premium-api-key">Premium API Key</label>
+          <input id="premium-api-key" type="password" placeholder="sk-..." autocomplete="off">
+        </div>
+
+        <p id="mode-description" class="mode-description">
+          일반 모드: API 키 없이 브라우저에서 업스케일링 처리
+        </p>
+      </div>
+
       <div class="btn-group">
         <button type="button" class="btn secondary" data-action="cancel">취소/다시 올리기</button>
         <button id="btn-proceed" type="button" class="btn primary" data-action="proceed">업스케일링 진행</button>
@@ -140,6 +169,7 @@
     </footer>
   </main>
 
+  <script src="./node_modules/pica/dist/pica.min.js"></script>
   <script type="module" src="./js/main.js"></script>
 </body>
 </html>

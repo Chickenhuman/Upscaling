@@ -72,6 +72,28 @@ export function validateImageFile(file, config) {
   return { valid: true, message: "" };
 }
 
+export function validatePremiumConfig({ apiUrl, apiKey }) {
+  const normalizedUrl = String(apiUrl || "").trim();
+  const normalizedKey = String(apiKey || "").trim();
+
+  if (!normalizedUrl) {
+    return { valid: false, message: "프리미엄 모드에서는 API URL을 입력해야 합니다." };
+  }
+
+  try {
+    // URL 형식 검증
+    new URL(normalizedUrl);
+  } catch {
+    return { valid: false, message: "API URL 형식이 올바르지 않습니다." };
+  }
+
+  if (!normalizedKey) {
+    return { valid: false, message: "프리미엄 모드에서는 API Key를 입력해야 합니다." };
+  }
+
+  return { valid: true, message: "" };
+}
+
 export function getImageDimensionsFromUrl(url) {
   return new Promise((resolve, reject) => {
     const image = new Image();

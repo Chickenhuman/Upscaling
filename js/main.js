@@ -1,30 +1,43 @@
-import { upscaleImage } from "./api.js";
+import { upscaleImage as upscaleImageByApi } from "./api.js";
+import { upscaleImageLocal } from "./local-upscale.js";
 import {
   buildDownloadName,
   formatFileSize,
   getImageDimensionsFromUrl,
   validateImageFile,
+  validatePremiumConfig,
 } from "./utils.js";
 import { UIController } from "./ui.js";
 
+const UPSCALE_MODE = Object.freeze({
+  STANDARD: "standard",
+  PREMIUM: "premium",
+});
+
 const CONFIG = Object.freeze({
-  API_URL: "/api/upscale",
-  API_KEY: "",
   FILE_FIELD_NAME: "image",
-  UPSCALE_FACTOR: 2,
 
   MAX_FILE_SIZE_MB: 10,
   MAX_FILE_SIZE_BYTES: 10 * 1024 * 1024,
   ALLOWED_MIME_TYPES: ["image/jpeg", "image/png", "image/webp"],
   ALLOWED_EXTENSIONS: ["jpg", "jpeg", "png", "webp"],
 
-  USE_MOCK_API: true,
-  MOCK_DELAY_MS: 2200,
+  DEFAULT_MODE: UPSCALE_MODE.STANDARD,
+  STANDARD_UPSCALE_FACTOR: 2,
+  PREMIUM_UPSCALE_FACTOR: 4,
 
-  LOADING_TIPS: [
-    "팁: 고해상도 원본일수록 결과 디테일이 더 잘 살아납니다.",
-    "팁: 처리 중에는 브라우저 탭을 닫지 않는 것이 좋습니다.",
-    "팁: 결과 화면에서 슬라이더로 전후 차이를 빠르게 확인할 수 있습니다.",
+  PREMIUM_API_URL_DEFAULT: "",
+  PREMIUM_API_KEY_DEFAULT: "",
+
+  STANDARD_LOADING_TIPS: [
+    "일반 모드: 브라우저 내 JS 라이브러리로 이미지를 업스케일링합니다.",
+    "팁: 일반 모드는 API Key 없이 빠르게 결과를 확인하기 좋습니다.",
+    "팁: 더 높은 품질이 필요하면 프리미엄 모드로 전환해 보세요.",
+  ],
+  PREMIUM_LOADING_TIPS: [
+    "프리미엄 모드: 외부 업스케일링 API를 호출하고 있습니다.",
+    "팁: API Key는 브라우저가 아닌 백엔드 보관을 권장합니다.",
+    "팁: 네트워크 상태에 따라 처리 시간이 달라질 수 있습니다.",
   ],
 
   LOADING_PROGRESS_MAX_DURING_PROCESS: 92,
@@ -37,6 +50,12 @@ const elements = {
   dropZone: document.getElementById("drop-zone"),
   compareSlider: document.getElementById("compare-slider"),
   proceedButton: document.getElementById("btn-proceed"),
+
+  modeRadios: Array.from(document.querySelectorAll("input[name='upscale-mode']")),
+  premiumSettings: document.getElementById("premium-settings"),
+  premiumApiUrlInput: document.getElementById("premium-api-url"),
+  premiumApiKeyInput: document.getElementById("premium-api-key"),
+  modeDescription: document.getElementById("mode-description"),
 
   statusText: document.getElementById("status-text"),
   uploadGuide: document.getElementById("upload-guide"),
@@ -72,6 +91,7 @@ const elements = {
 const ui = new UIController(elements);
 
 const state = {
+  selectedMode: CONFIG.DEFAULT_MODE,
   selectedFile: null,
   sourceImageUrl: "",
   resultImageUrl: "",
@@ -87,7 +107,12 @@ initialize();
 function initialize() {
   const extensionText = CONFIG.ALLOWED_EXTENSIONS.map((ext) => ext.toUpperCase()).join(", ");
   ui.setUploadGuide(`지원 형식: ${extensionText} / 최대 ${CONFIG.MAX_FILE_SIZE_MB}MB`);
+
+  elements.premiumApiUrlInput.value = CONFIG.PREMIUM_API_URL_DEFAULT;
+  elements.premiumApiKeyInput.value = CONFIG.PREMIUM_API_KEY_DEFAULT;
+
   ui.resetForUpload();
+  syncModeFromSelection();
 
   elements.fileInput.addEventListener("change", onFileInputChange);
 
@@ -96,6 +121,10 @@ function initialize() {
   elements.dropZone.addEventListener("dragover", onDragEnterOrOver);
   elements.dropZone.addEventListener("dragleave", onDragLeaveOrDrop);
   elements.dropZone.addEventListener("drop", onDrop);
+
+  elements.modeRadios.forEach((radio) => {
+    radio.addEventListener("change", onModeChange);
+  });
 
   elements.app.addEventListener("click", onAppClick);
   elements.compareSlider.addEventListener("input", onCompareInput);
@@ -145,6 +174,19 @@ async function onDrop(event) {
   onDragLeaveOrDrop(event);
   const file = event.dataTransfer?.files?.[0] || null;
   await handleSelectedFile(file);
+}
+
+function onModeChange() {
+  syncModeFromSelection();
+  ui.hideConfirmError();
+}
+
+function syncModeFromSelection() {
+  const selected = elements.modeRadios.find((radio) => radio.checked)?.value;
+  state.selectedMode =
+    selected === UPSCALE_MODE.PREMIUM ? UPSCALE_MODE.PREMIUM : UPSCALE_MODE.STANDARD;
+
+  ui.updateModeUI(state.selectedMode);
 }
 
 async function handleSelectedFile(file) {
@@ -220,16 +262,39 @@ async function startUpscaling() {
     return;
   }
 
+  if (state.selectedMode === UPSCALE_MODE.PREMIUM) {
+    const premiumValidation = validatePremiumConfig({
+      apiUrl: elements.premiumApiUrlInput.value,
+      apiKey: elements.premiumApiKeyInput.value,
+    });
+
+    if (!premiumValidation.valid) {
+      ui.showConfirmError(premiumValidation.message);
+      return;
+    }
+  }
+
   state.isProcessing = true;
   ui.setProcessingState(true);
   ui.hideConfirmError();
   ui.showPhase("loading");
   startLoadingProgress();
-  ui.startLoadingTips(CONFIG.LOADING_TIPS);
+  ui.startLoadingTips(getLoadingTipsByMode(state.selectedMode));
 
   try {
     clearResultImage();
-    const result = await upscaleImage(state.selectedFile, CONFIG);
+
+    const result = state.selectedMode === UPSCALE_MODE.PREMIUM
+      ? await upscaleImageByApi(state.selectedFile, {
+        API_URL: elements.premiumApiUrlInput.value.trim(),
+        API_KEY: elements.premiumApiKeyInput.value.trim(),
+        FILE_FIELD_NAME: CONFIG.FILE_FIELD_NAME,
+        UPSCALE_FACTOR: CONFIG.PREMIUM_UPSCALE_FACTOR,
+      })
+      : await upscaleImageLocal(state.selectedFile, {
+        upscaleFactor: CONFIG.STANDARD_UPSCALE_FACTOR,
+      });
+
     stopLoadingProgress(100);
 
     state.resultImageUrl = result.imageUrl;
@@ -238,20 +303,51 @@ async function startUpscaling() {
     ui.renderResult({
       beforeUrl: state.sourceImageUrl,
       afterUrl: state.resultImageUrl,
-      message: "업스케일링이 완료되었습니다. 슬라이더로 결과를 비교해 보세요.",
+      message: buildResultMessage(state.selectedMode),
     });
 
     ui.showPhase("result");
   } catch (error) {
     console.error(error);
     stopLoadingProgress(0);
-    ui.showConfirmError("처리에 실패했습니다. 네트워크 상태를 확인한 뒤 다시 시도해 주세요.");
+    ui.showConfirmError(buildModeErrorMessage(error, state.selectedMode));
     ui.showPhase("confirm");
   } finally {
     state.isProcessing = false;
     ui.setProcessingState(false);
     ui.stopLoadingTips();
   }
+}
+
+function buildResultMessage(mode) {
+  if (mode === UPSCALE_MODE.PREMIUM) {
+    return "프리미엄 업스케일링이 완료되었습니다. 슬라이더로 결과를 비교해 보세요.";
+  }
+
+  return "일반 업스케일링이 완료되었습니다. 슬라이더로 결과를 비교해 보세요.";
+}
+
+function buildModeErrorMessage(error, mode) {
+  const text = error instanceof Error ? error.message : "";
+
+  if (mode === UPSCALE_MODE.PREMIUM) {
+    if (text) {
+      return `프리미엄 모드 실패: ${text}`;
+    }
+    return "프리미엄 모드 처리에 실패했습니다. API 설정과 네트워크 상태를 확인해 주세요.";
+  }
+
+  if (text) {
+    return `일반 모드 실패: ${text}`;
+  }
+
+  return "일반 모드 처리에 실패했습니다. 브라우저 환경을 확인해 주세요.";
+}
+
+function getLoadingTipsByMode(mode) {
+  return mode === UPSCALE_MODE.PREMIUM
+    ? CONFIG.PREMIUM_LOADING_TIPS
+    : CONFIG.STANDARD_LOADING_TIPS;
 }
 
 function downloadResult() {
@@ -337,6 +433,7 @@ function resetToUpload() {
 
   ui.stopLoadingTips();
   ui.resetForUpload();
+  syncModeFromSelection();
 }
 
 function updateCompareByClientX(clientX) {

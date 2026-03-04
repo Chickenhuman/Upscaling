@@ -5,11 +5,9 @@ import { upscaleImage } from "../js/api.js";
 
 const baseConfig = {
   API_URL: "https://example.com/upscale",
-  API_KEY: "",
+  API_KEY: "sk-test",
   FILE_FIELD_NAME: "image",
-  UPSCALE_FACTOR: 2,
-  USE_MOCK_API: false,
-  MOCK_DELAY_MS: 1,
+  UPSCALE_FACTOR: 4,
 };
 
 const originalFetch = global.fetch;
@@ -35,8 +33,21 @@ describe("upscaleImage", () => {
     const result = await upscaleImage(new Blob(["test"], { type: "image/png" }), baseConfig);
 
     assert.equal(result.imageUrl, responseBody.resultUrl);
-    assert.equal(result.source, "remote");
+    assert.equal(result.source, "premium-api");
     assert.equal(result.cleanup, null);
+  });
+
+  it("throws when API key is missing", async () => {
+    global.fetch = async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ resultUrl: "https://cdn.example.com/out.png" }),
+    });
+
+    await assert.rejects(
+      () => upscaleImage(new Blob(["test"], { type: "image/png" }), { ...baseConfig, API_KEY: "" }),
+      /API Key/,
+    );
   });
 
   it("throws when API returns non-ok response", async () => {

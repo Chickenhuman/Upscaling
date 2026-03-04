@@ -1,5 +1,3 @@
-import { delay } from "./utils.js";
-
 function extractResultUrl(payload) {
   if (!payload || typeof payload !== "object") {
     return "";
@@ -15,29 +13,26 @@ function extractResultUrl(payload) {
 }
 
 export async function upscaleImage(file, config) {
-  if (config.USE_MOCK_API) {
-    await delay(config.MOCK_DELAY_MS);
+  const apiUrl = String(config.API_URL || "").trim();
+  const apiKey = String(config.API_KEY || "").trim();
 
-    const mockUrl = URL.createObjectURL(file);
-    return {
-      imageUrl: mockUrl,
-      cleanup: () => URL.revokeObjectURL(mockUrl),
-      source: "mock",
-    };
+  if (!apiUrl) {
+    throw new Error("프리미엄 모드 API URL이 비어 있습니다.");
+  }
+
+  if (!apiKey) {
+    throw new Error("프리미엄 모드 API Key가 필요합니다.");
   }
 
   const formData = new FormData();
   formData.append(config.FILE_FIELD_NAME, file);
   formData.append("scale", String(config.UPSCALE_FACTOR));
 
-  const headers = {};
-  if (config.API_KEY) {
-    headers.Authorization = `Bearer ${config.API_KEY}`;
-  }
-
-  const response = await fetch(config.API_URL, {
+  const response = await fetch(apiUrl, {
     method: "POST",
-    headers,
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+    },
     body: formData,
   });
 
@@ -55,6 +50,6 @@ export async function upscaleImage(file, config) {
   return {
     imageUrl: resultUrl,
     cleanup: null,
-    source: "remote",
+    source: "premium-api",
   };
 }
