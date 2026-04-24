@@ -1,0 +1,10 @@
+{
+  "name": "card-cafe-loop",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "python3 -m http.server 4173",
+    "check": "node --check src/main.js && node tools/smoke-test.mjs && node tools/balance-sim.mjs 5000 upscale-bright-001"
+  }
+}
